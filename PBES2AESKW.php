@@ -17,8 +17,8 @@ use ParagonIE\ConstantTime\Base64UrlSafe;
 abstract class PBES2AESKW implements KeyWrapping
 {
     public function __construct(
-        private int $salt_size = 64,
-        private int $nb_count = 4096
+        private readonly int $salt_size = 64,
+        private readonly int $nb_count = 4096
     ) {
     }
 
@@ -27,6 +27,10 @@ abstract class PBES2AESKW implements KeyWrapping
         return ['oct'];
     }
 
+    /**
+     * @param array<string, mixed> $completeHeader
+     * @param array<string, mixed> $additionalHeader
+     */
     public function wrapKey(JWK $key, string $cek, array $completeHeader, array &$additionalHeader): string
     {
         $password = $this->getKey($key);
@@ -52,6 +56,9 @@ abstract class PBES2AESKW implements KeyWrapping
         return $wrapper::wrap($derived_key, $cek);
     }
 
+    /**
+     * @param array<string, mixed> $completeHeader
+     */
     public function unwrapKey(JWK $key, string $encrypted_cek, array $completeHeader): string
     {
         $password = $this->getKey($key);
@@ -60,8 +67,16 @@ abstract class PBES2AESKW implements KeyWrapping
         $wrapper = $this->getWrapper();
         $hash_algorithm = $this->getHashAlgorithm();
         $key_size = $this->getKeySize();
-        $salt = $completeHeader['alg'] . "\x00" . Base64UrlSafe::decode($completeHeader['p2s']);
+        $p2s = $completeHeader['p2s'];
+        $p2c = $completeHeader['p2c'];
+        if (! is_string($p2s)) {
+            throw new InvalidArgumentException('Invalid salt parameter');
+        }
         $count = $completeHeader['p2c'];
+        if (! is_int($count)) {
+            throw new InvalidArgumentException('Invalid count parameter');
+        }
+        $salt = $completeHeader['alg'] . "\x00" . Base64UrlSafe::decode($p2s);
 
         $derived_key = hash_pbkdf2($hash_algorithm, $password, $salt, $count, $key_size, true);
 
@@ -89,6 +104,9 @@ abstract class PBES2AESKW implements KeyWrapping
         return Base64UrlSafe::decode($k);
     }
 
+    /**
+     * @param array<string, mixed> $header
+     */
     protected function checkHeaderAlgorithm(array $header): void
     {
         if (! isset($header['alg'])) {
@@ -99,6 +117,9 @@ abstract class PBES2AESKW implements KeyWrapping
         }
     }
 
+    /**
+     * @param array<string, mixed> $header
+     */
     protected function checkHeaderAdditionalParameters(array $header): void
     {
         if (! isset($header['p2s'])) {
